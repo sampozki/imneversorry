@@ -29,6 +29,7 @@ class Teekkari:
         self.urbaaniUrl = 'https://urbaanisanakirja.com/random/'
         self.urbaaniWordUrl = 'https://urbaanisanakirja.com/word/'
         self.slangopediaUrl = 'http://www.slangopedia.se/slumpa/'
+        self.uutineUrl = 'https://www.is.fi/tuoreimmat/'
         self.viisaudet = db.readViisaudet()
         self.sanat = db.readSanat()
         self.diagnoosit = db.readDiagnoosit()
@@ -43,6 +44,9 @@ class Teekkari:
         self.sotilasnimet = db.readSotilasnimet()
         self.ennustukset = db.readEnnustukset()
         self.lastVitun = {}
+        self.nextUutine = 0
+        self.lastUutineUpdate = 0
+        self.uutineet = [ [], [] ]
 
     def getCommands(self):
         return self.commands
@@ -55,9 +59,9 @@ class Teekkari:
 
     def handleHakemus(self, bot, update, args=''):
         if random.randint(0, 9) == 0:
-            bot.sendMessage(chat_id=update.message.chat_id, text='hyy-vä')
+            bot.sendSticker(chat_id=update.message.chat_id, sticker='CAADBAADJgADiR7LDbglwFauETpzFgQ')
         else:
-            bot.sendMessage(chat_id=update.message.chat_id, text='tapan sut')
+            bot.sendSticker(chat_id=update.message.chat_id, sticker='CAADBAADPwADiR7LDV1aPNns0V1YFgQ')
 
     def getViisaus(self, bot, update, args=''):
         bot.sendMessage(chat_id=update.message.chat_id, text=random.sample(self.viisaudet, 1)[0][0])
@@ -130,12 +134,12 @@ class Teekkari:
         return str(url[-1].split('=')[-1].lower())
 
     def getVitun(self, bot, update, args=''):
-        now = time.time()
+        now = datetime.datetime.now().date()
         userId = update.message.from_user.id
         if userId not in self.lastVitun:
             self.lastVitun[userId] = now
             bot.sendMessage(chat_id=update.message.chat_id, text=self.getUrbaani().capitalize() + " vitun " + self.getUrbaani())
-        elif self.lastVitun[userId] + 86400 < now:
+        elif self.lastVitun[userId] != now:
             self.lastVitun[userId] = now
             bot.sendMessage(chat_id=update.message.chat_id, text=self.getUrbaani().capitalize() + " vitun " + self.getUrbaani())
 
@@ -191,6 +195,26 @@ class Teekkari:
             ennustus += emoji.emojize(r)
         bot.sendMessage(chat_id=update.message.chat_id, text=ennustus)
 
+    def getUutine(self, bot, update, args=''):
+        now = time.time()
+        if self.lastUutineUpdate + 3600 < now:
+            self.lastUutineUpdate = now
+            webpage = urllib.request.urlopen(self.uutineUrl).read().decode("utf-8")
+            uutine = str(webpage)
+            self.uutineet = [ [], [] ]
+            for otsikko in uutine.split('<li class="list-item">'):
+                otsikko = otsikko.replace('\n', '').replace('\r', '')
+                if '<div class="content">' in otsikko:
+                    otsikko = otsikko.split('<div class="content">')[1].split('</div>')[0]
+                    if ' – ' in otsikko:
+                        otsikko = otsikko.split(' – ')
+                        self.uutineet[0].append(otsikko[0])
+                        self.uutineet[1].append(otsikko[1])
+        if self.nextUutine < now:
+            self.nextUutine = now + random.randint(10, 120)
+            uutine = random.choice(self.uutineet[0]) + ' – ' + random.choice(self.uutineet[1])
+            bot.sendMessage(chat_id=update.message.chat_id, text=uutine)
+
     def banHammer(self, bot, update, args=''):
         duration = datetime.datetime.now() + datetime.timedelta(minutes=1)
         print(duration)
@@ -212,6 +236,8 @@ class Teekkari:
                 self.getDiagnoosi(bot, update)
             elif 'horoskoop' in msg.text.lower():
                 self.getEnnustus(bot, update)
+            elif 'uutine' in msg.text.lower():
+                self.getUutine(bot, update)
             elif re.match(r'^halo', msg.text.lower()):
                 self.getHalo(bot, update)
             elif re.match(r'^noppa', msg.text.lower()):
